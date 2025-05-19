@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Tracked Anime{% endblock %}
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 24px;">Tracked Anime</h2>
+    {% if tracked_anime %}
+        <table style="width:100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Episodes</th>
+                    <th>Quality</th>
+                    <th>Status</th>
+                    <th>Save Path</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for anime in tracked_anime %}
+                <tr>
+                    <td>
+                        <strong>{{ anime.title }}</strong>
+                        <br>
+                        <span style="font-size: 0.95em; color: #888;">RSS: <a href="{{ anime.rss_url }}" target="_blank">link</a></span>
+                    </td>
+                    <td style="text-align:center;">
+                        {{ anime.last_episode }}/{{ anime.expected_episodes if anime.expected_episodes else "?" }}
+                    </td>
+                    <td style="text-align:center;">
+                        {{ anime.quality_preference|upper }}
+                    </td>
+                    <td style="text-align:center;">
+                        {{ anime.status }}
+                    </td>
+                    <td style="font-size: 0.97em;">
+                        {{ anime.save_path }}
+                    </td>
+                    <td style="text-align:center;">
+                        <form method="post" action="{{ url_for('untrack', anime_id=anime.id) }}" class="delete-form" style="display:inline;">
+                            <button type="submit" class="button delete" onclick="return confirm('Untrack this anime?');">Untrack</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div style="text-align:center; color:#888; padding: 40px 0;">
+            <div style="font-size:1.2em;">No tracked anime yet.</div>
+            <div style="margin-top:8px;">Start tracking by searching for an anime!</div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Top Completed Downloads{% endblock %}
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom:20px;">Top Completed Downloads from Nyaa.si</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Size</th>
+                <th>Seeders</th>
+                <th>Leechers</th>
+                <th>Downloads</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th>Download</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+            <tr>
+                <td style="max-width:350px;word-break:break-word;">{{ item.title }}</td>
+                <td>{{ item.size }}</td>
+                <td>{{ item.seeders }}</td>
+                <td>{{ item.leechers }}</td>
+                <td>{{ item.downloads }}</td>
+                <td>{{ item.category }}</td>
+                <td style="font-size:0.95em;">{{ item.pubDate }}</td>
+                <td>
+                    <a href="{{ item.link }}" class="button" target="_blank">Torrent</a>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <!-- Pagination Tabs -->
+    <div style="text-align:center; margin-top:24px;">
+        {% if pages > 1 %}
+            {% for p in range(1, pages+1) %}
+                {% if p == page %}
+                    <span class="button" style="background:#6366f1; color:#fff; pointer-events:none;">{{ p }}</span>
+                {% else %}
+                    <a href="{{ url_for('top_completed', page=p) }}" class="button">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

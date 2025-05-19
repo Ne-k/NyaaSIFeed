@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Nyaa RSS Tracker{% endblock %}</title>
+    <style>
+        :root {
+            --bg-color: #f0f7f4;
+            --text-color: #3c3c3c;
+            --primary-color: #a8d5e2;
+            --secondary-color: #f9a7b0;
+            --hover-color: #87bdd8;
+            --card-bg: #ffffff;
+            --border-radius: 12px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .button {
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            padding: 10px 25px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: 500;
+        }
+
+        .button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .button.delete {
+            background-color: var(--secondary-color);
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        input, select {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            border: 2px solid var(--primary-color);
+            border-radius: var(--border-radius);
+            padding: 10px;
+            margin: 5px 0;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        th {
+            background-color: var(--primary-color);
+            color: var(--text-color);
+        }
+
+        .search-result-item {
+            background-color: var(--card-bg);
+            border: 2px solid var(--primary-color);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .search-result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .title-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+        }
+
+        .year-badge {
+            background-color: var(--secondary-color);
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+
+        .delete-form {
+            display: inline-block;
+            margin-left: 10px;
+        }
+
+        /* Global loading overlay styles */
+        #global-loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.85);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        #global-loading-overlay.active {
+            pointer-events: all;
+            display: flex;
+        }
+        .spinner {
+            border: 6px solid #e5e7eb;
+            border-top: 6px solid #6366f1;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 18px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg);}
+            100% { transform: rotate(360deg);}
+        }
+        .loading-text {
+            font-size: 1.2em;
+            color: #6366f1;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .logout-bar {
+            text-align: right;
+            margin-bottom: 10px;
+        }
+
+        /* Modal styles for settings */
+        #settingsModal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.4);
+            z-index: 1001;
+        }
+        #settingsModal .modal-content {
+            background: #fff;
+            max-width: 400px;
+            margin: 60px auto;
+            padding: 32px 24px;
+            border-radius: 12px;
+            position: relative;
+        }
+        #settingsModal .close {
+            position: absolute;
+            top: 8px;
+            right: 16px;
+            cursor: pointer;
+            font-size: 1.5em;
+        }
+    </style>
+</head>
+<body>
+    <!-- Settings Popup Button -->
+    {% if session.logged_in %}
+    <button onclick="document.getElementById('settingsModal').style.display='block'" class="button" style="position:fixed;top:16px;right:16px;z-index:1000;">⚙️</button>
+    <div id="settingsModal">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('settingsModal').style.display='none'">&times;</span>
+            <h3 style="margin-top:0;">Settings</h3>
+            <form method="post" action="{{ url_for('set_download_path') }}">
+                <label for="download_path">Download Folder:</label>
+                <input type="text" id="download_path" name="download_path" value="{{ session.get('download_path', '') }}" style="width:100%;margin-bottom:16px;" required>
+                <button type="submit" class="button" style="width:100%;">Save</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+    <div id="global-loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+    <div class="container">
+        <div class="logout-bar">
+            {% if session.logged_in %}
+                <a href="{{ url_for('logout') }}" class="button" style="background:#f87171;">Logout</a>
+            {% endif %}
+        </div>
+        <h1 style="color: #6a7fdb; margin-bottom: 30px;">
+            <a href="{{ url_for('index') }}" style="text-decoration:none; color:inherit; cursor:pointer;">🌸 RSS Tracker</a>
+        </h1>
+        {% block content %}{% endblock %}
+    </div>
+    <script>
+    // Show global loading animation on any navigation or form submit
+    function showGlobalLoading() {
+        document.getElementById('global-loading-overlay').classList.add('active');
+    }
+    function hideGlobalLoading() {
+        document.getElementById('global-loading-overlay').classList.remove('active');
+    }
+
+    // Show loading on navigation away (works for all pages)
+    window.addEventListener('beforeunload', function(e) {
+        showGlobalLoading();
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Hide overlay after page load
+        hideGlobalLoading();
+
+        // Show loading on form submits
+        document.querySelectorAll('form').forEach(function(form) {
+            form.addEventListener('submit', function() {
+                showGlobalLoading();
+            });
+        });
+        // Show loading on all link clicks except anchor tabs
+        document.querySelectorAll('a').forEach(function(link) {
+            link.addEventListener('click', function(e) {
+                // Only show loading for real navigation, not tab switches
+                if (link.getAttribute('href') && link.getAttribute('href') !== '#') {
+                    showGlobalLoading();
+                }
+            });
+        });
+        // Hide overlay after page load (for fast navigation)
+        window.addEventListener('pageshow', hideGlobalLoading);
+    });
+
+    // Close modal when clicking outside of it
+    window.onclick = function(event) {
+        var modal = document.getElementById('settingsModal');
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
+    </script>
+    {% if session.logged_in %}
+    <form method="post" action="{{ url_for('kill_process') }}" style="margin-top: 40px; text-align: center;">
+        <button type="submit" class="button delete" style="padding: 14px 32px; font-size: 1.1em;">
+            Kill Process
+        </button>
+    </form>
+    {% endif %}
+</body>
+</html>

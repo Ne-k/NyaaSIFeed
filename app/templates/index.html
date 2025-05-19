@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <form method="POST" action="/search">
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" name="query" placeholder="Enter anime title" required>
+                <input type="url" name="rss_url" placeholder="Custom RSS feed (optional)" style="min-width:250px;">
+                <button type="submit" class="button">Search</button>
+            </div>
+            <div style="font-size:0.95em; color:#888; margin-top:6px;">
+                Leave blank to use the default nyaa.si feed.
+            </div>
+        </form>
+        <div style="margin-top: 20px;">
+            <a href="{{ url_for('tracking_list') }}" class="button">View Tracked Anime</a>
+            <a href="{{ url_for('qb_status') }}" class="button" style="margin-left: 10px;">View qB Status</a>
+            <a href="{{ url_for('top_completed') }}" class="button" style="margin-right: 10px;">
+                Top Completed Downloads
+            </a>
+        </div>
+    </div>
+{% endblock %}

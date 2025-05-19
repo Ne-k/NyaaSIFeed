@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h2>Search Results</h2>
+        <div class="anime-list">
+            {% if results %}
+                {% for anime in results %}
+                    <div class="search-result-item" 
+                         onclick='window.location.href = {{ url_for("select_anime", mal_id=anime.mal_id) | tojson }};'>
+                        <div class="title-container">
+                            <span>{{ anime.title }}</span>
+                            <span class="badges-right">
+                                {% if anime.status == "Currently Airing" %}
+                                    <span class="status-badge ongoing">Ongoing</span>
+                                {% elif anime.status == "Finished Airing" %}
+                                    <span class="status-badge finished">Finished</span>
+                                {% else %}
+                                    <span class="status-badge other">{{ anime.status }}</span>
+                                {% endif %}
+                                <span class="year-badge">{{ anime.year or 'N/A' }}</span>
+                            </span>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="search-result-item">
+                    <div class="title-container">
+                        <span>No results found</span>
+                    </div>
+                </div>
+                <a href="{{ url_for('index') }}" class="button">Try Again</a>
+            {% endif %}
+        </div>
+    </div>
+    <style>
+        .search-result-item {
+            padding: 12px 18px;
+            border-bottom: 1px solid #e5e7eb;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .search-result-item:hover {
+            background: #f3f4f6;
+        }
+        .title-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .badges-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .year-badge {
+            background: #e0e7ff;
+            color: #3730a3;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 0.95em;
+            font-weight: 500;
+        }
+        .status-badge {
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 0.95em;
+            font-weight: 500;
+        }
+        .status-badge.ongoing {
+            background: #d1fae5;
+            color: #047857;
+        }
+        .status-badge.finished {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .status-badge.other {
+            background: #fef9c3;
+            color: #b45309;
+        }
+    </style>
+{% endblock %}

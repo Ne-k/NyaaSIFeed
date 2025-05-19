@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 400px; margin: 60px auto 0 auto; display: flex; flex-direction: column; align-items: center; padding-left: 32px; padding-right: 32px;">
+    <h2 style="text-align:center; color:#6366f1; margin-bottom: 24px;">Login</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}" style="
+            margin-bottom: 18px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 1em;
+            text-align: center;
+            {% if category == 'success' %}background:#d1fae5;color:#065f46;{% endif %}
+            {% if category == 'danger' %}background:#fee2e2;color:#991b1b;{% endif %}
+            {% if category == 'info' %}background:#e0e7ff;color:#3730a3;{% endif %}
+          ">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post" autocomplete="off" style="width:100%; display:flex; flex-direction:column; align-items:center;">
+        <input type="text" name="username" placeholder="Username" required autofocus style="margin-bottom: 16px; text-align:center; padding-left: 16px; padding-right: 16px;">
+        <input type="password" name="password" placeholder="Password" required style="margin-bottom: 24px; text-align:center; padding-left: 16px; padding-right: 16px;">
+        <button type="submit" class="button" style="width:100%;font-size:1.1em;">Sign In</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+flask
+requests
+python-dotenv
+qbittorrent-api
+flask-sqlalchemy
+apscheduler

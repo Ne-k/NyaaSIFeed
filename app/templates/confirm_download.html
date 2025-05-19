@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Track {{ title }}{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h2>Track {{ title }}</h2>
+        <form method="get" action="{{ url_for('select_anime', mal_id=session['current_mal_id']) }}">
+            <input type="hidden" name="title" value="{{ title }}">
+            <input type="hidden" name="rss_url" value="{{ rss_url }}">
+            <input type="hidden" name="save_path" value="{{ default_save_path }}">
+            <label for="quality">Quality Preference:</label>
+            <select name="quality" id="quality">
+                <option value="">Any</option>
+                {% for q in qualities %}
+                    <option value="{{ q }}" {% if quality == q %}selected{% endif %}>{{ q|upper }}</option>
+                {% endfor %}
+            </select>
+            <label for="video_codec" style="margin-left: 12px;">Video Codec:</label>
+            <select name="video_codec" id="video_codec">
+                <option value="">Any</option>
+                {% for codec in video_codecs %}
+                    <option value="{{ codec }}" {% if selected_video_codec == codec %}selected{% endif %}>{{ codec }}</option>
+                {% endfor %}
+            </select>
+            <label for="audio_codec" style="margin-left: 12px;">Audio Codec:</label>
+            <select name="audio_codec" id="audio_codec">
+                <option value="">Any</option>
+                {% for codec in audio_codecs %}
+                    <option value="{{ codec }}" {% if selected_audio_codec == codec %}selected{% endif %}>{{ codec }}</option>
+                {% endfor %}
+            </select>
+            <label for="language" style="margin-left: 12px;">Language:</label>
+            <select name="language" id="language">
+                <option value="">Any</option>
+                {% for lang in languages %}
+                    <option value="{{ lang }}" {% if selected_language == lang %}selected{% endif %}>{{ lang }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="button" style="margin-left: 16px;">Apply Filters</button>
+        </form>
+        <form method="post" action="{{ url_for('track') }}">
+            <input type="hidden" name="title" value="{{ title }}">
+            <input type="hidden" name="rss_url" value="{{ rss_url }}">
+            <input type="hidden" name="save_path" value="{{ default_save_path }}">
+            <input type="hidden" name="quality" value="{{ quality }}">
+            <input type="hidden" name="video_codec" value="{{ selected_video_codec }}">
+            <input type="hidden" name="audio_codec" value="{{ selected_audio_codec }}">
+            <input type="hidden" name="language" value="{{ selected_language }}">
+            <h3 style="margin-top: 24px;">Select torrents to track:</h3>
+            <div class="tabs-container">
+                <ul id="group-tabs" class="tabs">
+                    {% for group in rss_items.keys() %}
+                        <li>
+                            <a href="#" onclick="showTab('{{ group }}'); return false;" id="tab-{{ group }}">{{ group }}</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+                {% set quality_aliases = {
+                    '1080p': ['1080p', '1920x1080'],
+                    '720p': ['720p', '1280x720'],
+                    '480p': ['480p', '854x480'],
+                    '2160p': ['2160p', '3840x2160', '4k'],
+                    '576p': ['576p', '720x576'],
+                    '4k': ['4k', '2160p', '3840x2160'],
+                } %}
+                {% set selected_qualities = quality_aliases.get(quality, [quality]) if quality else [] %}
+                {% for group, items in rss_items.items() %}
+                    <div class="torrent-group" id="group-{{ group }}" style="{% if not loop.first %}display:none;{% endif %}">
+                        <div style="margin-bottom: 12px;">
+                            <button type="button" class="button" onclick="setGroupCheckboxes('{{ group }}', true)">Check All</button>
+                            <button type="button" class="button" onclick="setGroupCheckboxes('{{ group }}', false)">Uncheck All</button>
+                        </div>
+                        {% if group_batch_flags[group] %}
+                        <h4>[BATCH] Torrents</h4>
+                        {% for item in items if item.is_batch %}
+                            {% if (not quality or selected_qualities|select('in', item.title)|list)
+                                and (not selected_video_codec or selected_video_codec.lower() in item.video_codec.lower())
+                                and (not selected_audio_codec or selected_audio_codec.lower() in item.audio_codec.lower())
+                                and (not selected_language or selected_language in item.languages) %}
+                            <label class="torrent-item torrent-checkbox-row">
+                                <input type="checkbox" name="selected_torrents" value="{{ item.link }}" style="display:none;">
+                                <span class="torrent-title">{{ item.title }}</span>
+                                <span class="torrent-meta">
+                                    <span class="torrent-size">{{ item.size }}</span>
+                                    <span class="torrent-seeders">Seeders: {{ item.seeders }}</span>
+                                    <span class="torrent-leechers">Leechers: {{ item.leechers }}</span>
+                                    <span class="torrent-langs">Langs: {{ item.languages|join(', ') }}</span>
+                                </span>
+                            </label>
+                            {% endif %}
+                        {% endfor %}
+                        {% endif %}
+                        <h4>Single Episode Torrents</h4>
+                        {% for item in items if not item.is_batch %}
+                            {% if (not quality or selected_qualities|select('in', item.title)|list)
+                                and (not selected_video_codec or selected_video_codec.lower() in item.video_codec.lower())
+                                and (not selected_audio_codec or selected_audio_codec.lower() in item.audio_codec.lower())
+                                and (not selected_language or selected_language in item.languages) %}
+                            <label class="torrent-item torrent-checkbox-row">
+                                <input type="checkbox" name="selected_torrents" value="{{ item.link }}" style="display:none;">
+                                <span class="torrent-title">{{ item.title }}</span>
+                                <span class="torrent-meta">
+                                    <span class="torrent-size">{{ item.size }}</span>
+                                    <span class="torrent-seeders">Seeders: {{ item.seeders }}</span>
+                                    <span class="torrent-leechers">Leechers: {{ item.leechers }}</span>
+                                    <span class="torrent-langs">Langs: {{ item.languages|join(', ') }}</span>
+                                </span>
+                            </label>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="button" style="margin-top: 20px;">Track</button>
+        </form>
+    </div>
+    <style>
+        .tabs-container {
+            margin-top: 16px;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            list-style: none;
+            padding: 0;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }
+        .tabs li a {
+            display: block;
+            padding: 8px 18px;
+            border-radius: 6px 6px 0 0;
+            background: #f5f5f5;
+            color: #333;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .tabs li a.active, .tabs li a:hover {
+            background: #e0e7ff;
+            color: #222;
+            font-weight: bold;
+        }
+        .torrent-group {
+            margin-top: 0;
+            padding: 10px 0 0 0;
+        }
+        .torrent-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            transition: box-shadow 0.2s, background 0.2s;
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+        }
+        .torrent-checkbox-row.selected {
+            background: #e0e7ff;
+            box-shadow: 0 2px 8px rgba(60, 60, 120, 0.07);
+        }
+        .torrent-checkbox-row input[type="checkbox"] {
+            display: none;
+        }
+        .torrent-label {
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+        .torrent-title {
+            font-weight: 500;
+            margin-left: 8px;
+            word-break: break-all;
+        }
+        .torrent-meta {
+            display: flex;
+            gap: 14px;
+            font-size: 0.95em;
+            color: #555;
+            margin-left: 16px;
+            white-space: nowrap;
+        }
+        .torrent-size {
+            color: #6366f1;
+            font-weight: 500;
+        }
+        .button {
+            background: #6366f1;
+            color: #fff;
+            border: none;
+            padding: 10px 26px;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .button:hover {
+            background: #4f46e5;
+        }
+    </style>
+    <script>
+    function showTab(group) {
+        document.querySelectorAll('.torrent-group').forEach(div => div.style.display = 'none');
+        document.getElementById('group-' + group).style.display = '';
+        document.querySelectorAll('#group-tabs a').forEach(a => a.classList.remove('active'));
+        document.getElementById('tab-' + group).classList.add('active');
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        let firstTab = document.querySelector('#group-tabs a');
+        if (firstTab) firstTab.classList.add('active');
+
+        // Make row clickable for checkbox toggle
+        document.querySelectorAll('.torrent-checkbox-row').forEach(function(row) {
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            // Set initial highlight
+            if (checkbox.checked) row.classList.add('selected');
+            row.addEventListener('click', function(e) {
+                // Only toggle if not clicking a link inside the row
+                if (e.target.tagName !== 'A') {
+                    checkbox.checked = !checkbox.checked;
+                    row.classList.toggle('selected', checkbox.checked);
+                    e.preventDefault();
+                }
+            });
+        });
+    });
+
+    // Group-specific check/uncheck
+    function setGroupCheckboxes(group, checked) {
+        document.querySelectorAll('#group-' + group + ' .torrent-checkbox-row input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = checked;
+            cb.closest('.torrent-checkbox-row').classList.toggle('selected', checked);
+        });
+    }
+    </script>
+{% endblock %}

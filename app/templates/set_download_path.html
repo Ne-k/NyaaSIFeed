@@ -1,0 +1,252 @@
+{% macro render_tree(tree) %}
+<ul class="folder-list">
+  {% for node in tree %}
+    <li class="folder-list-item" data-folder="{{ node.name|lower }}">
+      {% if node.children %}
+        <button type="button" class="folder-toggle" tabindex="0" aria-label="Expand/collapse folder"></button>
+      {% endif %}
+      <button type="submit" name="download_path" value="{{ node.path }}"
+        class="folder-btn">
+        <span class="folder-icon" aria-hidden="true">📁</span>{{ node.name }}
+      </button>
+      {% if node.children %}
+        <div class="folder-children">
+          {{ render_tree(node.children) }}
+        </div>
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Set Download Folder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Pastel, modern, minimal base styles, some from base.html -->
+  <style>
+    :root {
+      --bg-color: #f0f7f4;
+      --text-color: #3c3c3c;
+      --primary-color: #a8d5e2;
+      --secondary-color: #f9a7b0;
+      --hover-color: #87bdd8;
+      --card-bg: #ffffff;
+      --border-radius: 18px;
+      --shadow: 0 2px 12px rgba(44,62,80,0.06);
+      --shadow-card: 0 2px 16px rgba(44,62,80,0.07);
+    }
+    body {
+      background: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+    }
+    .navbar {
+      background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+      color: #224abe;
+      padding: 18px 0 18px 32px;
+      font-size: 1.3rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      box-shadow: var(--shadow);
+      margin-bottom: 32px;
+    }
+    .custom-folder-picker {
+      max-width: 600px;
+      margin: 40px auto 0 auto;
+      background: var(--card-bg);
+      border-radius: var(--border-radius);
+      box-shadow: var(--shadow-card);
+      padding: 32px 28px 28px 28px;
+    }
+    .custom-folder-picker h4 {
+      margin-top: 0;
+      color: #224abe;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .folder-tree-container {
+      border: 1.5px solid #e3e6f0;
+      padding: 20px;
+      border-radius: var(--border-radius);
+      background: linear-gradient(135deg, #f7f9fb 60%, #eaf6fb 100%);
+      font-size: 16px;
+      box-shadow: var(--shadow);
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .folder-scroll-area {
+      max-height: 300px;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+    .folder-list {
+      list-style: none;
+      padding-left: 1em;
+      margin-bottom: 0;
+    }
+    .folder-list-item {
+      margin: 10px 0;
+      position: relative;
+    }
+    .folder-btn {
+      display: inline-block;
+      background: linear-gradient(90deg, #e3f0ff 0%, #f7eaff 100%);
+      color: #224abe;
+      border: none;
+      border-radius: 22px;
+      padding: 10px 28px 10px 18px;
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      margin-right: 8px;
+      transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.12s;
+      box-shadow: 0 1px 6px rgba(44,62,80,0.08);
+      cursor: pointer;
+      outline: none;
+    }
+    .folder-btn:hover, .folder-btn:focus {
+      background: linear-gradient(90deg, #d0eaff 0%, #e9eaff 100%);
+      color: #1b2e6f;
+      box-shadow: 0 2px 12px rgba(44,62,80,0.13);
+      transform: translateY(-2px) scale(1.03);
+    }
+    .folder-icon {
+      font-size: 1.15em;
+      vertical-align: middle;
+      margin-right: 8px;
+      color: #7bb7fa;
+    }
+    input#folder-search.form-control {
+      background: #f7f9fb;
+      border-radius: 18px;
+      border: 1.5px solid #e3e6f0;
+      color: #224abe;
+      font-size: 15px;
+      padding-left: 16px;
+      padding-right: 16px;
+      margin: 12px 0 18px 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    input#folder-search.form-control:focus {
+      border-color: #b3d8fd;
+      background: #eaf6fb;
+      color: #224abe;
+      outline: none;
+      box-shadow: 0 0 0 2px #e3f0ff;
+    }
+    /* Collapsible folders */
+    .folder-toggle {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      margin-right: 4px;
+      vertical-align: middle;
+      cursor: pointer;
+      background: none;
+      border: none;
+      outline: none;
+      position: relative;
+    }
+    .folder-toggle:before {
+      content: "▼";
+      font-size: 0.9em;
+      color: #a8d5e2;
+      transition: transform 0.2s;
+      display: inline-block;
+      transform: rotate(0deg);
+    }
+    .collapsed > .folder-toggle:before {
+      content: "▶";
+      color: #a8d5e2;
+      transform: rotate(0deg);
+    }
+    .folder-children {
+      margin-left: 24px;
+    }
+    .collapsed > .folder-children {
+      display: none;
+    }
+    @media (max-width: 700px) {
+      .custom-folder-picker {
+        max-width: 98vw;
+        padding: 16px 4vw;
+      }
+      .folder-tree-container {
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    NyaaSi RSS Downloader
+  </div>
+  <div class="custom-folder-picker">
+    <h4 class="mb-3">Set Download Folder</h4>
+    <form method="post" id="folder-form">
+      <div class="folder-tree-container">
+        <strong style="color:#4e73df;">Choose a folder:</strong>
+        <input
+          type="text"
+          id="folder-search"
+          class="form-control"
+          placeholder="Type to search folders..."
+          autocomplete="off"
+        >
+        <div class="folder-scroll-area">
+          {{ render_tree(dir_tree) }}
+        </div>
+      </div>
+    </form>
+  </div>
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Collapse all folders with children by default
+    document.querySelectorAll('.folder-list-item').forEach(function(item) {
+      if (item.querySelector('.folder-children')) {
+        item.classList.add('collapsed');
+      }
+    });
+
+    // Toggle collapse on button click
+    document.querySelectorAll('.folder-toggle').forEach(function(toggle) {
+      toggle.addEventListener('click', function(e) {
+        const li = this.closest('.folder-list-item');
+        if (li) li.classList.toggle('collapsed');
+        e.stopPropagation();
+      });
+      toggle.addEventListener('keydown', function(e) {
+        if (e.key === "Enter" || e.key === " ") {
+          const li = this.closest('.folder-list-item');
+          if (li) li.classList.toggle('collapsed');
+          e.preventDefault();
+        }
+      });
+    });
+
+    // Search logic (unchanged)
+    const searchInput = document.getElementById('folder-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        document.querySelectorAll('.folder-tree-container li[data-folder]').forEach(function(li) {
+          const folderName = li.getAttribute('data-folder');
+          let match = !query || folderName.includes(query);
+          if (!match) {
+            match = !!li.querySelector('li[data-folder]:not([style*="display: none"])');
+          }
+          li.style.display = match ? '' : 'none';
+        });
+      });
+    }
+  });
+</script>
+</body>
+</html>

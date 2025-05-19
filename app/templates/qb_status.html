@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}qBittorrent Status{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>qBittorrent Download Status</h2>
+    {% if torrents %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Progress</th>
+                    <th>State</th>
+                    <th>Download Speed</th>
+                    <th>Upload Speed</th>
+                    <th>ETA</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for torrent in torrents %}
+                <tr>
+                    <td>{{ torrent.name }}</td>
+                    <td>{{ (torrent.progress * 100) | round(2) }}%</td>
+                    <td>
+                        {% if torrent.state %}
+                            {{ torrent.state|capitalize }}
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
+                    <td>{{ (torrent.dlspeed / 1024) | round(1) }} KB/s</td>
+                    <td>{{ (torrent.upspeed / 1024) | round(1) }} KB/s</td>
+                    <td>
+                        {% if torrent.eta == 8640000 %}
+                            ∞
+                        {% else %}
+                            {{ (torrent.eta // 3600) ~ 'h ' ~ ((torrent.eta // 60) % 60) ~ 'm' }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No active downloads.</p>
+    {% endif %}
+</div>
+{% endblock %}
