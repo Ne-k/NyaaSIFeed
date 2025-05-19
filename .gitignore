@@ -1,3 +1,4 @@
-app/.env
+.env
 .venv
 app/instance
+instance

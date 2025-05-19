@@ -325,13 +325,22 @@ def qb_login():
         raise Exception("Failed to login to qBittorrent Web API")
     return session, qb_url
 
-def qb_add_torrent_url(session, qb_url, torrent_url, save_path):
-    resp = session.post(
-        f"{qb_url}/api/v2/torrents/add",
-        data={'urls': torrent_url, 'savepath': save_path}
-    )
-    if resp.status_code != 200:
-        raise Exception(f"Failed to add torrent: {torrent_url} ({resp.text})")
+def qb_add_torrent_url(session, qb_url, torrent_url, save_path, retries=3):
+    for attempt in range(retries):
+        try:
+            resp = session.post(
+                f"{qb_url}/api/v2/torrents/add",
+                data={'urls': torrent_url, 'savepath': save_path},
+                timeout=15  # Add a timeout
+            )
+            if resp.status_code == 200:
+                return
+            else:
+                app.logger.error(f"Failed to add torrent (attempt {attempt+1}): {torrent_url} ({resp.text})")
+        except requests.RequestException as e:
+            app.logger.error(f"Exception adding torrent (attempt {attempt+1}): {torrent_url} ({e})")
+        time.sleep(2)
+    raise Exception(f"Failed to add torrent after {retries} attempts: {torrent_url}")
 
 def rank_torrent(item, preferred_quality, preferred_video_codec, preferred_audio_codec):
     score = 0
