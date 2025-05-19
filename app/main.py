@@ -678,14 +678,6 @@ def inject_project_name():
 
 @app.route('/kill-process', methods=['POST'])
 def kill_process():
-    # Kill playit process if running
-    global playit_proc
-    if playit_proc and playit_proc.poll() is None:
-        playit_proc.terminate()
-        try:
-            playit_proc.wait(timeout=5)
-        except Exception:
-            playit_proc.kill()
     os.kill(os.getpid(), signal.SIGTERM)
     return "Process killed", 200
 
