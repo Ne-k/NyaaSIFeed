@@ -2,3 +2,5 @@
 .venv
 app/instance
 instance
+build
+dist
