@@ -1,5 +1,6 @@
 .env
 app/venv
+venv
 app/instance
 instance
 build
