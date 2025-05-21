@@ -15,6 +15,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
 from functools import wraps
+from datetime import datetime
+from pytz import timezone
+
 
 load_dotenv()
 
@@ -54,6 +57,7 @@ def get_current_api_token():
 
 # --- End Rotating API Token ---
 
+
 class TrackedAnime(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
@@ -63,6 +67,7 @@ class TrackedAnime(db.Model):
     quality_preference = db.Column(db.String(20), default='1080p')
     status = db.Column(db.String(50), default='Unknown')
     expected_episodes = db.Column(db.Integer, default=0)
+    airing_date = db.Column(db.DateTime, nullable=True)  # <-- Add this line
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME").strip('"')
 ADMIN_PASSWORD_B64 = os.getenv("ADMIN_PASSWORD_HASH")
@@ -430,9 +435,14 @@ def get_downloading_episodes(session_api, qb_url, save_path):
 def monitor_rss_feeds():
     with app.app_context():
         all_anime = TrackedAnime.query.all()
+        now_pst = datetime.now(timezone('US/Pacific'))
         for anime in all_anime:
+            # Skip if not yet aired and airing date is in the future
+            if anime.status.lower() == "not yet aired" and anime.airing_date and anime.airing_date > now_pst:
+                app.logger.info(f"Skipping {anime.title}: Not aired yet (airs {anime.airing_date})")
+                continue
+
             app.logger.info(f"Checking: {anime.title} ({anime.save_path}) [{anime.rss_url}]")
-            # Remove if finished and all episodes are out
             if (
                 anime.status.lower() == "finished"
                 and anime.expected_episodes > 0
@@ -442,20 +452,11 @@ def monitor_rss_feeds():
                 db.session.commit()
                 continue
 
-            # If finished, stop tracking
-            if anime.status.lower() == "finished":
-                db.session.delete(anime)
-                db.session.commit()
-                continue
-
             try:
                 items = parse_rss_feed(anime.rss_url)
-                # Get episodes already downloaded
                 existing_episodes = get_existing_episodes(anime.save_path)
-                # Get episodes currently downloading
                 session_api, qb_url = qb_login()
                 downloading_episodes = get_downloading_episodes(session_api, qb_url, anime.save_path)
-                # Combine both sets
                 already_handled = existing_episodes | downloading_episodes
 
                 episode_items = []
@@ -480,7 +481,6 @@ def monitor_rss_feeds():
                     qb_add_torrent_url(session_api, qb_url, torrent_url, anime.save_path)
                     anime.last_episode = max(anime.last_episode, ep_num)
                     db.session.commit()
-                # Update last_episode based on files in directory
                 if existing_episodes:
                     anime.last_episode = max(existing_episodes)
                     db.session.commit()
@@ -668,6 +668,19 @@ def select_anime(mal_id):
         dir_tree=dir_tree  # Pass the directory tree to the template
     )
 
+def get_airing_date_from_jikan(mal_id):
+    # Jikan API returns UTC, convert to PST
+    url = f"https://api.jikan.moe/v4/anime/{mal_id}"
+    resp = requests.get(url)
+    if resp.status_code == 200:
+        data = resp.json().get('data', {})
+        aired_from = data.get('aired', {}).get('from')
+        if aired_from:
+            dt_utc = datetime.fromisoformat(aired_from.replace('Z', '+00:00'))
+            dt_pst = dt_utc.astimezone(timezone('US/Pacific'))
+            return dt_pst
+    return None
+
 @app.route('/track', methods=['POST'])
 def track():
     try:
@@ -678,14 +691,24 @@ def track():
         selected_torrents = request.form.getlist('selected_torrents')
         status = None
         expected_episodes = 0
-        # Try to get expected episodes from session['results']
+        airing_date = None
+        mal_id = None
         for a in session.get('results', []):
             if a['title'] == title:
-                status = a.get('status', 'Unknown')
+                status = a.get('status', 'Unknown').lower()
                 expected_episodes = a.get('episodes', 0) or 0
+                mal_id = a.get('mal_id')
                 break
         if not all([title, rss_url, save_path, quality]):
             return redirect(url_for('index'))
+
+        if status == "finished":
+            flash("This anime is finished and will not be tracked.", "warning")
+            return redirect(url_for('tracking_list'))
+
+        if status == "not yet aired" and mal_id:
+            airing_date = get_airing_date_from_jikan(mal_id)
+
         if selected_torrents:
             session_api, qb_url = qb_login()
             for torrent_url in selected_torrents:
@@ -699,7 +722,8 @@ def track():
                 save_path=save_path,
                 quality_preference=quality,
                 status=status or 'Unknown',
-                expected_episodes=expected_episodes
+                expected_episodes=expected_episodes,
+                airing_date=airing_date
             )
             db.session.add(new_anime)
             db.session.commit()

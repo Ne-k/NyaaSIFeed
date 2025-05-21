@@ -198,7 +198,7 @@
             <h3 style="margin-top:0;">Settings</h3>
             <form method="post" action="{{ url_for('set_download_path') }}">
                 <label for="download_path">Download Folder:</label>
-                <input type="text" id="download_path" name="download_path" value="{{ session.get('download_path', '') }}" style="width:100%;margin-bottom:16px;" required>
+                <input type="text" id="download_path" name="download_path" value="{{ current or '' }}" style="width:100%;margin-bottom:16px;" required>                
                 <button type="submit" class="button" style="width:100%;">Save</button>
             </form>
         </div>
