@@ -67,6 +67,24 @@ class TrackedAnime(db.Model):
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME").strip('"')
 ADMIN_PASSWORD_B64 = os.getenv("ADMIN_PASSWORD_HASH")
 
+class Setting(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(db.String(500), nullable=False)
+
+def get_setting(key, default=None):
+    s = Setting.query.filter_by(key=key).first()
+    return s.value if s else default
+
+def set_setting(key, value):
+    s = Setting.query.filter_by(key=key).first()
+    if s:
+        s.value = value
+    else:
+        s = Setting(key=key, value=value)
+        db.session.add(s)
+    db.session.commit()
+
 def is_logged_in():
     return session.get("logged_in", False)
 
@@ -326,13 +344,17 @@ def qb_login():
     return session, qb_url
 
 def qb_add_torrent_url(session, qb_url, torrent_url, save_path, retries=3):
+    # Remove accidental surrounding quotes and strip whitespace
+    save_path = save_path.strip().strip('"').strip("'")
+    app.logger.info(f"Adding torrent: {torrent_url} to save_path: {save_path!r}")
     for attempt in range(retries):
         try:
             resp = session.post(
                 f"{qb_url}/api/v2/torrents/add",
                 data={'urls': torrent_url, 'savepath': save_path},
-                timeout=15  # Add a timeout
+                timeout=15
             )
+            app.logger.info(f"qBittorrent add response: {resp.status_code} {resp.text}")
             if resp.status_code == 200:
                 return
             else:
@@ -379,10 +401,37 @@ def rank_torrent(item, preferred_quality, preferred_video_codec, preferred_audio
         score += 2
     return score
 
+def get_existing_episodes(save_path):
+    """Return a set of episode numbers found in the save_path directory."""
+    if not os.path.isdir(save_path):
+        return set()
+    episode_nums = set()
+    episode_pattern = re.compile(r'\b(\d{1,3})\b')
+    for fname in os.listdir(save_path):
+        match = episode_pattern.search(fname)
+        if match:
+            episode_nums.add(int(match.group(1)))
+    return episode_nums
+
+def get_downloading_episodes(session_api, qb_url, save_path):
+    """Return a set of episode numbers currently downloading to save_path."""
+    episode_nums = set()
+    try:
+        resp = session_api.get(f"{qb_url}/api/v2/torrents/info")
+        for torrent in resp.json():
+            if torrent.get("save_path", "").rstrip("\\/") == save_path.rstrip("\\/"):
+                match = re.search(r'\b(\d{1,3})\b', torrent.get("name", ""))
+                if match:
+                    episode_nums.add(int(match.group(1)))
+    except Exception:
+        pass
+    return episode_nums
+
 def monitor_rss_feeds():
     with app.app_context():
         all_anime = TrackedAnime.query.all()
         for anime in all_anime:
+            app.logger.info(f"Checking: {anime.title} ({anime.save_path}) [{anime.rss_url}]")
             # Remove if finished and all episodes are out
             if (
                 anime.status.lower() == "finished"
@@ -393,14 +442,26 @@ def monitor_rss_feeds():
                 db.session.commit()
                 continue
 
-            if anime.status != "Currently Airing":
+            # If finished, stop tracking
+            if anime.status.lower() == "finished":
+                db.session.delete(anime)
+                db.session.commit()
                 continue
+
             try:
                 items = parse_rss_feed(anime.rss_url)
+                # Get episodes already downloaded
+                existing_episodes = get_existing_episodes(anime.save_path)
+                # Get episodes currently downloading
+                session_api, qb_url = qb_login()
+                downloading_episodes = get_downloading_episodes(session_api, qb_url, anime.save_path)
+                # Combine both sets
+                already_handled = existing_episodes | downloading_episodes
+
                 episode_items = []
                 for item in items:
                     ep_num = get_episode_number(item.findtext('title', ''))
-                    if ep_num > anime.last_episode:
+                    if ep_num > 0 and ep_num not in already_handled:
                         episode_items.append((ep_num, item))
                 episodes = {}
                 for ep_num, item in episode_items:
@@ -416,9 +477,12 @@ def monitor_rss_feeds():
                         )
                     )[0]
                     torrent_url = best.findtext('link')
-                    session, qb_url = qb_login()
-                    qb_add_torrent_url(session, qb_url, torrent_url, anime.save_path)
-                    anime.last_episode = ep_num
+                    qb_add_torrent_url(session_api, qb_url, torrent_url, anime.save_path)
+                    anime.last_episode = max(anime.last_episode, ep_num)
+                    db.session.commit()
+                # Update last_episode based on files in directory
+                if existing_episodes:
+                    anime.last_episode = max(existing_episodes)
                     db.session.commit()
             except Exception as e:
                 app.logger.error(f"Monitoring error for {anime.title}: {str(e)}")
@@ -434,10 +498,73 @@ def index():
         ADMIN_USERNAME=ADMIN_USERNAME
     )
 
+@app.route('/set-download-path', methods=['GET', 'POST'])
+def set_download_path():
+    if request.method == 'POST':
+        set_setting('download_path', request.form['download_path'])
+        flash("Download path updated!", "success")
+        next_page = session.pop('next_after_download_path', None)
+        if next_page:
+            return redirect(next_page)
+        return redirect(url_for('index'))
+
+    def get_dir_tree(root, depth=2):
+        tree = []
+        if depth < 0 or not os.path.isdir(root):
+            return tree
+        try:
+            for entry in os.scandir(root):
+                if entry.is_dir():
+                    subtree = get_dir_tree(entry.path, depth-1)
+                    tree.append({
+                        'name': entry.name,
+                        'path': entry.path,
+                        'children': subtree
+                    })
+        except Exception:
+            pass
+        return tree
+
+    dir_trees = []
+    if os.name == 'nt':
+        import string
+        from ctypes import windll
+        
+        bitmask = windll.kernel32.GetLogicalDrives()
+        for letter in string.ascii_uppercase:
+            if bitmask & 1:
+                drive = f"{letter}:\\"
+                if os.path.isdir(drive):
+                    dir_trees.append({
+                        'name': drive,
+                        'path': drive,
+                        'children': get_dir_tree(drive, depth=2)
+                    })
+            bitmask >>= 1
+    else:
+        roots = ['/']
+        for extra in ['/media', '/mnt']:
+            if os.path.isdir(extra):
+                roots.append(extra)
+        for root in roots:
+            dir_trees.append({
+                'name': root,
+                'path': root,
+                'children': get_dir_tree(root, depth=2)
+            })
+
+    current_download_path = get_setting('download_path', '')
+    return render_template(
+        'set_download_path.html',
+        current=current_download_path,
+        dir_tree=dir_trees
+    )
+
 @app.route('/search', methods=['POST'])
 def search():
     # Check for download path first
-    if not session.get('download_path'):
+    download_path = get_setting('download_path', '')
+    if not download_path:
         # Store the search query and rss_url in session to resume after setting path
         session['pending_search_query'] = request.form['query']
         session['pending_search_rss_url'] = request.form.get('rss_url', '').strip()
@@ -481,70 +608,6 @@ def resume_search():
     } for a in results]
     return render_template('search_results.html', results=session['results'])
 
-@app.route('/set-download-path', methods=['GET', 'POST'])
-def set_download_path():
-    if request.method == 'POST':
-        session['download_path'] = request.form['download_path']
-        flash("Download path updated!", "success")
-        next_page = session.pop('next_after_download_path', None)
-        if next_page:
-            return redirect(next_page)
-        return redirect(url_for('index'))
-
-    def get_dir_tree(root, depth=2):
-        tree = []
-        if depth < 0 or not os.path.isdir(root):
-            return tree
-        try:
-            for entry in os.scandir(root):
-                if entry.is_dir():
-                    subtree = get_dir_tree(entry.path, depth-1)
-                    tree.append({
-                        'name': entry.name,
-                        'path': entry.path,
-                        'children': subtree
-                    })
-        except Exception:
-            pass
-        return tree
-
-    dir_trees = []
-    if os.name == 'nt':
-        import string
-        from ctypes import windll
-
-        bitmask = windll.kernel32.GetLogicalDrives()
-        for letter in string.ascii_uppercase:
-            if bitmask & 1:
-                drive = f"{letter}:\\"
-                # This check ensures only existing drives are added
-                if os.path.isdir(drive):
-                    dir_trees.append({
-                        'name': drive,
-                        'path': drive,
-                        'children': get_dir_tree(drive, depth=2)
-                    })
-            bitmask >>= 1
-        else:
-            roots = ['/']
-            for extra in ['/media', '/mnt']:
-                if os.path.isdir(extra):
-                    roots.append(extra)
-            for root in roots:
-                dir_trees.append({
-                    'name': root,
-                    'path': root,
-                    'children': get_dir_tree(root, depth=2)
-                })
-
-    return render_template(
-        'set_download_path.html',
-        current=session.get('download_path', ''),
-        dir_tree=dir_trees
-    )
-
-
-
 @app.route('/select/<int:mal_id>')
 def select_anime(mal_id):
     if 'results' not in session:
@@ -559,7 +622,7 @@ def select_anime(mal_id):
         formatted_title = quote_plus(anime['title'])
         rss_url = f"https://nyaa.si/?page=rss&q={formatted_title}&c=0_0&f=2"
     # Use dynamic download path
-    download_path = session.get('download_path')
+    download_path = get_setting('download_path', '')
     if not download_path:
         return redirect(url_for('set_download_path'))
     default_save_path = os.path.join(download_path, anime['title'])
@@ -676,6 +739,10 @@ def tracking_list():
 def inject_project_name():
     return dict(project_name="RSS Tracker")
 
+@app.context_processor
+def inject_download_path():
+    return {'current': get_setting('download_path', '')}
+
 @app.route('/kill-process', methods=['POST'])
 def kill_process():
     os.kill(os.getpid(), signal.SIGTERM)
@@ -685,4 +752,3 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     app.run(debug=False, host='0.0.0.0', port=5000)
-
